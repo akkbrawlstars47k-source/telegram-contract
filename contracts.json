@@ -66,7 +66,7 @@
         {
           "key": "ogrn",
           "label": "ОГРН пользователя",
-          "type": "text",
+          "type": "ogrn",
           "example": "1027700000008"
         },
         {
@@ -78,7 +78,7 @@
         {
           "key": "kpp",
           "label": "КПП пользователя",
-          "type": "text",
+          "type": "kpp",
           "example": "770101001"
         },
         {
@@ -144,7 +144,7 @@
         {
           "key": "user_account",
           "label": "Расчётный счёт пользователя",
-          "type": "text",
+          "type": "account",
           "example": "40702810000000000001"
         },
         {
@@ -156,13 +156,13 @@
         {
           "key": "user_correspondent_account",
           "label": "Корреспондентский счёт банка пользователя",
-          "type": "text",
+          "type": "account",
           "example": "30101810000000000001"
         },
         {
           "key": "user_bic",
           "label": "БИК банка пользователя",
-          "type": "text",
+          "type": "bic",
           "example": "044525001"
         },
         {
@@ -216,7 +216,7 @@
         {
           "key": "vois_account",
           "label": "Расчётный счёт ВОИС",
-          "type": "text",
+          "type": "account",
           "example": "40703810000000000002"
         },
         {
@@ -228,13 +228,13 @@
         {
           "key": "vois_correspondent_account",
           "label": "Корреспондентский счёт банка ВОИС",
-          "type": "text",
+          "type": "account",
           "example": "30101810000000000002"
         },
         {
           "key": "vois_bic",
           "label": "БИК банка ВОИС",
-          "type": "text",
+          "type": "bic",
           "example": "044525002"
         },
         {

@@ -1,6 +1,11 @@
 import asyncio
 import logging
 import os
+from io import BytesIO
+from zipfile import ZipFile, BadZipFile
+from docx import Document
+from docx.table import Table
+from docx.text.paragraph import Paragraph
 from html import escape
 
 from aiogram import Bot, Dispatcher, F, Router
@@ -92,7 +97,7 @@ def make_router(catalog: dict[str, Contract], threshold: int) -> Router:
             return
         await callback.answer()
         # Telegram messages have a 4096-character limit. Send long forms in blocks.
-        intro = f"{contract.title}. Скопируйте заготовку, замените примеры и пришлите реквизиты."
+        intro = f"{contract.title}. Пришлите карточку компании текстом или файлом DOCX. Порядок строк свободный. Можно также заполнить заготовку ниже."
         await send_prompt(callback.message, contract.fields, intro)
         await state.set_data({"contract": contract.id, "values": {}})
         await state.set_state(Form.filling)
@@ -135,7 +140,37 @@ def make_router(catalog: dict[str, Contract], threshold: int) -> Router:
     async def receive(message: Message, state: FSMContext):
         data = await state.get_data()
         contract = catalog[data["contract"]]
-        values = merge_fields(contract, data["values"], message.text or "")
+        text = message.text or message.caption or ""
+        if message.document:
+            attachment = message.document
+            if not (attachment.file_name or "").lower().endswith(".docx"):
+                await message.answer("Пришлите карточку текстом или в формате DOCX.")
+                return
+            if attachment.file_size is None or attachment.file_size > 5 * 1024 * 1024:
+                await message.answer("Размер DOCX должен быть не более 5 МБ.")
+                return
+            try:
+                stream = BytesIO()
+                await message.bot.download(attachment, destination=stream)
+                stream.seek(0)
+                with ZipFile(stream) as archive:
+                    if sum(item.file_size for item in archive.infolist()) > 20 * 1024 * 1024:
+                        raise ValueError("Document too large")
+                stream.seek(0)
+                document = Document(stream)
+                parts = []
+                for element in document.element.body:
+                    if element.tag.endswith("}p"):
+                        parts.append(Paragraph(element, document).text)
+                    elif element.tag.endswith("}tbl"):
+                        for row in Table(element, document).rows:
+                            cells = list(dict.fromkeys(cell.text for cell in row.cells))
+                            parts.append(": ".join(cells))
+                text = "\n".join([*parts, text])
+            except Exception:
+                await message.answer("Не удалось прочитать DOCX. Скопируйте реквизиты из карточки и пришлите текстом.")
+                return
+        values = merge_fields(contract, data["values"], text)
         await state.update_data(values=values)
         pending = [field for field in contract.fields if field.key not in values]
         if pending:

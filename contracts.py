@@ -5,6 +5,7 @@ from datetime import date
 from io import BytesIO
 from pathlib import Path
 
+from company_card import extract_fields
 from docxtpl import DocxTemplate
 from jinja2 import Environment, StrictUndefined
 
@@ -17,6 +18,7 @@ class Field:
     label: str
     type: str
     example: str
+    aliases: tuple[str, ...] = ()
 
     def accepts(self, value: str) -> bool:
         if not value or len(value) > 500 or not re.fullmatch(
@@ -25,6 +27,9 @@ class Field:
             return False
         if self.type == "inn":
             return re.fullmatch(r"(?:[0-9]{10}|[0-9]{12})", value) is not None
+        lengths = {"ogrn": (13, 15), "kpp": (9,), "account": (20,), "bic": (9,)}
+        if self.type in lengths:
+            return value.isascii() and value.isdigit() and len(value) in lengths[self.type]
         if self.type == "date":
             match = re.fullmatch(r"([0-9]{2})\.([0-9]{2})\.([0-9]{4})", value)
             if not match:
@@ -67,7 +72,7 @@ def load_catalog() -> tuple[dict[str, Contract], int]:
                 or any(not re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]*", field.key)
                        or not field.label.strip() or ":" in field.label
                        or len(field.label.splitlines()) != 1 or len(field.example.splitlines()) != 1
-                       or field.type not in {"text", "date", "inn"} or not field.accepts(field.example)
+                       or field.type not in {"text", "date", "inn", "ogrn", "kpp", "account", "bic"} or not field.accepts(field.example)
                        for field in contract.fields)):
             raise ValueError(f"Проверьте поля шаблона {contract.id}.")
         if not contract.file.is_file() or contract.file.suffix.lower() != ".docx":
@@ -86,22 +91,14 @@ def load_catalog() -> tuple[dict[str, Contract], int]:
 
 def merge_fields(contract: Contract, accepted: dict[str, str], message: str) -> dict[str, str]:
     pending = [field for field in contract.fields if field.key not in accepted]
-    lines = message.strip().splitlines()
-    parsed: dict[str, list[str]] = {}
-    for line in lines:
-        label, separator, value = line.partition(":")
-        if separator:
-            parsed.setdefault(label.strip().casefold(), []).append(value.strip())
-
-    # A single remaining field can be sent without its label, even if the value contains a colon.
-    if len(pending) == 1 and len(lines) == 1:
-        known = {field.label.strip().casefold() for field in contract.fields}
-        if not parsed.keys() & known:
-            parsed[pending[0].label.strip().casefold()] = [lines[0].strip()]
+    parsed = extract_fields(contract.fields, message)
+    # A single requested field can still be answered with its value alone.
+    if len(pending) == 1 and len(message.strip().splitlines()) == 1 and not parsed:
+        parsed[pending[0].key] = [message.strip()]
 
     accepted = accepted.copy()
     for field in pending:
-        values = parsed.get(field.label.strip().casefold(), [])
+        values = parsed.get(field.key, [])
         if len(values) == 1 and field.accepts(values[0]):
             accepted[field.key] = values[0]
     return accepted
